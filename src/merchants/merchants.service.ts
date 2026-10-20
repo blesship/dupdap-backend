@@ -8,6 +8,7 @@ import { ApiScope, API_KEY_SCOPES } from '../auth/scopes';
 import { UpdateMerchantDto } from './dto/create-merchant.dto';
 import { CacheService } from '../cache/cache.service';
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { isValidIpOrCidr } from '../security/ip-allowlist.guard';
 
 /** Maximum allowed API key lifetime in milliseconds (365 days). */
 const MAX_EXPIRY_MS = 365 * 24 * 60 * 60 * 1000;
@@ -141,6 +142,33 @@ export class MerchantsService {
     await this.merchantsRepo.save(merchant);
 
     return { apiKey: rawKey, expiresAt: merchant.apiKeyExpiresAt };
+  }
+
+  /**
+   * Replace the IP allowlist for the merchant's API key. An empty list removes
+   * the restriction. Writes an audit log entry.
+   */
+  async setApiKeyIpAllowlist(id: string, cidrs: string[]): Promise<Merchant> {
+    const invalid = cidrs.filter((entry) => !isValidIpOrCidr(entry));
+    if (invalid.length > 0) {
+      throw new BadRequestException(`Invalid IP or CIDR entries: ${invalid.join(', ')}`);
+    }
+
+    const merchant = await this.findOne(id);
+    const before = { apiKeyIpAllowlist: merchant.apiKeyIpAllowlist ?? null };
+
+    merchant.apiKeyIpAllowlist = cidrs.length ? [...new Set(cidrs)] : null;
+    const updated = await this.merchantsRepo.save(merchant);
+
+    await this.auditLogRepo.save({
+      actor: id,
+      action: 'API_KEY_IP_ALLOWLIST_UPDATED',
+      resource: `merchant:${id}`,
+      before,
+      after: { apiKeyIpAllowlist: updated.apiKeyIpAllowlist },
+    });
+
+    return updated;
   }
 
   /**

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Merchant API key IP allowlist: `POST /merchants/api-keys/:id/ip-allowlist` restricts
+  a key to CIDR ranges; requests from other IPs get 403 `IP_NOT_ALLOWED`. Admin-role
+  keys bypass the allowlist with an audit log entry (#496).
 - Payment QR codes carry an expiry indicator: `expiresAt` ISO timestamp in
   responses, expiry baked into the QR payload, 410 Gone on expired scans (#545).
 - Audit logging for merchant configuration changes with masked bank account
