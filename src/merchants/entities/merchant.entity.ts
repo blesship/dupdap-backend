@@ -74,6 +74,10 @@ export class Merchant {
   @Column({ nullable: true })
   country: string;
 
+  /** E.164 destination for SMS notifications; SMS is only sent when set. */
+  @Column({ name: 'sms_phone_number', type: 'varchar', nullable: true })
+  smsPhoneNumber: string | null;
+
   /**
    * Fiat currency this merchant's settlements are denominated in.
    * Derived from `country` when not explicitly set.
