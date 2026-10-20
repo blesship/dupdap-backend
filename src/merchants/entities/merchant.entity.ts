@@ -161,6 +161,11 @@ export class Merchant {
   @Column({ default: false })
   totpEnabled: boolean;
 
+  /** SHA-256 hashes of the one-time recovery codes issued at registration. Each code is removed once used. */
+  @Exclude()
+  @Column('simple-array', { name: 'recovery_code_hashes', nullable: true })
+  recoveryCodeHashes?: string[] | null;
+
   @Column({ nullable: true, type: 'text' })
   allowedIps: string | null;
 
