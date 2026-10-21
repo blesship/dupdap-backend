@@ -18,6 +18,7 @@ import type { AuthTokenResponseDto } from './dto/auth-token-response.dto';
 import { CacheService } from '../cache/cache.service';
 import { EmailService } from '../email/email.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 
 /** Failed password attempts before a temporary lockout is applied. */
 const LOGIN_MAX_FAILED_ATTEMPTS = 5;
@@ -37,6 +38,7 @@ export class AuthService {
     private cacheService: CacheService,
     private emailService: EmailService,
     private auditService: AuditService,
+    private notificationService: NotificationService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokenResponseDto> {
@@ -61,7 +63,9 @@ export class AuthService {
     const saved = await this.merchantsRepo.save(merchant);
     const token = this.signToken(saved.id, saved.email, saved.role);
 
-    return { accessToken: token, merchant: saved, recoveryCodes };
+    const unreadNotificationCount = await this.notificationService.getUnreadCount(saved.id);
+
+    return { accessToken: token, merchant: saved, recoveryCodes, unreadNotificationCount };
   }
 
   /**
@@ -137,7 +141,9 @@ export class AuthService {
     await this.clearFailedLogin(emailKey);
 
     const token = this.signToken(merchant.id, merchant.email, merchant.role);
-    return { accessToken: token, merchant };
+    const unreadNotificationCount = await this.notificationService.getUnreadCount(merchant.id);
+
+    return { accessToken: token, merchant, unreadNotificationCount };
   }
 
   async logout(jti: string, ttlSeconds: number): Promise<void> {

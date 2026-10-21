@@ -151,6 +151,32 @@ export class Merchant {
   @Column({ name: 'payment_retry_delay_ms', type: 'int', default: 300000 })
   paymentRetryDelayMs: number;
 
+  /**
+   * Per-merchant payment amount limits in USD (#500). Payment creation is
+   * rejected with 422 LIMIT_EXCEEDED when a single payment exceeds
+   * `singleTransactionLimitUsd`, or when the rolling 24h total exceeds `dailyLimitUsd`.
+   * Defaults: $10,000 per transaction, $100,000 per day.
+   */
+  @Column({
+    name: 'single_transaction_limit_usd',
+    type: 'decimal',
+    precision: 18,
+    scale: 6,
+    default: 10000,
+    transformer: numericColumnTransformer,
+  })
+  singleTransactionLimitUsd: string;
+
+  @Column({
+    name: 'daily_limit_usd',
+    type: 'decimal',
+    precision: 18,
+    scale: 6,
+    default: 100000,
+    transformer: numericColumnTransformer,
+  })
+  dailyLimitUsd: string;
+
   @Column({ default: false })
   sandboxMode: boolean;
 

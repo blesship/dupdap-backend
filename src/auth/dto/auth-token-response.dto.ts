@@ -17,4 +17,7 @@ export class AuthTokenResponseDto {
     description: 'One-time recovery codes. Returned only on registration; they cannot be shown again.',
   })
   recoveryCodes?: string[];
+
+  @ApiProperty({ description: 'Number of unread in-app notifications for the merchant' })
+  unreadNotificationCount!: number;
 }
