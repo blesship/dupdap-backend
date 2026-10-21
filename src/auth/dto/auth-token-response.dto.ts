@@ -11,4 +11,7 @@ export class AuthTokenResponseDto {
     description: 'Merchant profile (password/key hashes and totpSecret stripped via @Exclude)',
   })
   merchant!: Merchant;
+
+  @ApiProperty({ description: 'Number of unread in-app notifications for the merchant' })
+  unreadNotificationCount!: number;
 }

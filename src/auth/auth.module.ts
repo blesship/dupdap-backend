@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './guards/jwt.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { RateLimitService } from './rate-limit.service';
 import { Merchant } from '../merchants/entities/merchant.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { CacheModule } from '../cache/cache.module';
 
 @Global()
@@ -17,6 +18,7 @@ import { CacheModule } from '../cache/cache.module';
   imports: [
     TypeOrmModule.forFeature([Merchant]),
     CacheModule,
+    NotificationsModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
