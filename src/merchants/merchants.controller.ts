@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Post, Body, Param, UseGuards, Request, Query, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Param, UseGuards, Request, Query, ForbiddenException, Delete } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -80,13 +80,14 @@ export class MerchantsController {
   @ApiForbiddenResponse({ description: 'Requires interactive JWT session — not reachable via API key' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   generateApiKey(
-    @Request() req: { user: { merchantId: string } },
+    @Request() req: { user: { merchantId: string }; ip: string },
     @Body() dto: GenerateApiKeyDto,
   ) {
     return this.merchantsService.generateApiKey(
       req.user.merchantId,
       dto.scopes,
       dto.expiresAt,
+      req.ip,
     );
   }
 
@@ -107,6 +108,20 @@ export class MerchantsController {
       throw new ForbiddenException("Cannot modify another merchant's API key");
     }
     return this.merchantsService.setApiKeyIpAllowlist(id, dto.cidrs);
+  }
+
+  @Delete('api-keys')
+  @Scopes('merchant:manage')
+  @ApiOperation({ summary: 'Revoke merchant API key' })
+  revokeApiKey(@Request() req: { user: { merchantId: string }; ip: string }) {
+    return this.merchantsService.revokeApiKey(req.user.merchantId, req.ip);
+  }
+
+  @Get('api-keys/audit')
+  @Scopes('profile:read')
+  @ApiOperation({ summary: 'List API key lifecycle audit events' })
+  getApiKeyAudit(@Request() req: { user: { merchantId: string } }, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.merchantsService.getApiKeyAudit(req.user.merchantId, page ? parseInt(page, 10) : 1, limit ? parseInt(limit, 10) : 20);
   }
 
   @Patch('me/settings')
@@ -149,5 +164,30 @@ export class MerchantsController {
     @Body() dto: UpdateNotificationPrefsDto,
   ): Promise<NotificationPrefsResponseDto> {
     return this.notificationPrefsService.updatePrefs(req.user.merchantId, dto);
+  }
+}
+
+/** Compatibility route matching the merchant API key audit endpoint name. */
+@ApiTags('merchant')
+@ApiBearerAuth('bearer')
+@ApiSecurity('api-key')
+@UseGuards(JwtAuthGuard)
+@Controller('merchant/api-keys')
+export class MerchantApiKeyAuditController {
+  constructor(private readonly merchantsService: MerchantsService) {}
+
+  @Get('audit')
+  @Scopes('profile:read')
+  @ApiOperation({ summary: 'List API key lifecycle audit events' })
+  getApiKeyAudit(
+    @Request() req: { user: { merchantId: string } },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.merchantsService.getApiKeyAudit(
+      req.user.merchantId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
   }
 }

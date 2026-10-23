@@ -5,6 +5,10 @@ import { PaymentsService } from './payments.service';
 import { PaymentsController, PublicPaymentController } from './payments.controller';
 import { Payment } from './entities/payment.entity';
 import { PaymentEvent } from './entities/payment-event.entity';
+import { PaymentDispute } from './entities/payment-dispute.entity';
+import { DisputesService } from './disputes.service';
+import { DisputesController } from './disputes.controller';
+import { SettlementsModule } from '../settlements/settlements.module';
 import { StellarModule } from '../stellar/stellar.module';
 import { CacheModule } from '../cache/cache.module';
 import { IdempotencyInterceptor } from './idempotency.interceptor';
@@ -18,11 +22,11 @@ import { AmlModule } from '../aml/aml.module';
 import { PaymentsSorobanListener } from './payments-soroban.listener';
 import { TransactionLimitsService } from './transaction-limits.service';
 import { AdminAlertModule } from '../alerts/admin-alert.module';
-import { GeoipModule } from '../geoip/geoip.module';
+import { PrometheusModule } from '../prometheus/prometheus.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, PaymentEvent]),
+    TypeOrmModule.forFeature([Payment, PaymentEvent, PaymentDispute]),
     forwardRef(() => StellarModule),
     CacheModule,
     WebhooksModule,
@@ -30,11 +34,12 @@ import { GeoipModule } from '../geoip/geoip.module';
     MerchantsModule,
     ConfigModule,
     AdminAlertModule,
+    PrometheusModule,
     forwardRef(() => AmlModule),
-    GeoipModule,
+    SettlementsModule,
   ],
-  controllers: [PaymentsController, PublicPaymentController],
-  providers: [PaymentsService, IdempotencyInterceptor, PaymentEscrowService, PaymentsSorobanListener, TransactionLimitsService],
+  controllers: [PaymentsController, PublicPaymentController, DisputesController],
+  providers: [PaymentsService, DisputesService, IdempotencyInterceptor, PaymentEscrowService, PaymentsSorobanListener, TransactionLimitsService],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}

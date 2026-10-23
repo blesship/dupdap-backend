@@ -34,6 +34,8 @@ export enum SettlementFrequency {
   WEEKLY = 'WEEKLY',
 }
 
+export enum KycStatus { UNVERIFIED = 'UNVERIFIED', PENDING = 'PENDING', VERIFIED = 'VERIFIED', REJECTED = 'REJECTED' }
+
 /**
  * Maps a merchant's country to the fiat currency used for its settlements.
  * Falls back to USD for unknown/missing countries so settlements are never
@@ -95,14 +97,34 @@ export class Merchant {
   @Column({ nullable: true })
   bankName: string;
 
-  @Column({ type: 'enum', enum: MerchantStatus, default: MerchantStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: MerchantStatus,
+    default: MerchantStatus.PENDING,
+  })
   status: MerchantStatus;
+
+  @Column({ type: 'enum', enum: KycStatus, enumName: 'merchants_kyc_status_enum', default: KycStatus.UNVERIFIED })
+  kycStatus: KycStatus;
+
+  @Column({ type: 'jsonb', nullable: true })
+  kycDocuments: Array<{ name: string; mimeType: string; data: string }> | null;
+
+  @Column({ type: 'boolean', default: false })
+  suspended: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  suspendedReason: string | null;
 
   @Column({ type: 'enum', enum: MerchantRole, default: MerchantRole.MERCHANT })
   role: MerchantRole;
 
   @Column({ nullable: true })
-  apiKey: string;
+  apiKey: string | null;
+
+  @Exclude()
+  @Column({ name: 'api_key_last_four', nullable: true, length: 4 })
+  apiKeyLastFour: string | null;
 
   @Column('simple-array', { name: 'api_key_scopes', nullable: true })
   apiKeyScopes?: ApiScope[];
@@ -113,7 +135,7 @@ export class Merchant {
 
   @Exclude()
   @Column({ nullable: true })
-  apiKeyHash: string;
+  apiKeyHash: string | null;
 
   @Exclude()
   @Column({ name: 'api_key_lookup_hash', nullable: true, unique: true })
@@ -127,10 +149,22 @@ export class Merchant {
   @Column({ type: 'timestamptz', nullable: true, default: null })
   apiKeyExpirySentAt: Date | null;
 
-  @Column({ type: 'decimal', precision: 18, scale: 6, default: 0, transformer: numericColumnTransformer })
+  @Column({
+    type: 'decimal',
+    precision: 18,
+    scale: 6,
+    default: 0,
+    transformer: numericColumnTransformer,
+  })
   totalVolumeUsd: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 4, default: 0.015, transformer: numericColumnTransformer })
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 4,
+    default: 0.015,
+    transformer: numericColumnTransformer,
+  })
   feeRate: string;
 
   /** Per-merchant custom fee rate override. Null means use global default. */
@@ -155,31 +189,9 @@ export class Merchant {
   @Column({ name: 'payment_retry_delay_ms', type: 'int', default: 300000 })
   paymentRetryDelayMs: number;
 
-  /**
-   * Per-merchant payment amount limits in USD (#500). Payment creation is
-   * rejected with 422 LIMIT_EXCEEDED when a single payment exceeds
-   * `singleTransactionLimitUsd`, or when the rolling 24h total exceeds `dailyLimitUsd`.
-   * Defaults: $10,000 per transaction, $100,000 per day.
-   */
-  @Column({
-    name: 'single_transaction_limit_usd',
-    type: 'decimal',
-    precision: 18,
-    scale: 6,
-    default: 10000,
-    transformer: numericColumnTransformer,
-  })
-  singleTransactionLimitUsd: string;
-
-  @Column({
-    name: 'daily_limit_usd',
-    type: 'decimal',
-    precision: 18,
-    scale: 6,
-    default: 100000,
-    transformer: numericColumnTransformer,
-  })
-  dailyLimitUsd: string;
+  /** Merchant-specific webhook delivery retry policy; null uses global defaults. */
+  @Column({ name: 'webhook_retry_config', type: 'jsonb', nullable: true, default: null })
+  webhookRetryConfig: { maxAttempts: number; retryDelays: number[] } | null;
 
   @Column({ default: false })
   sandboxMode: boolean;
@@ -197,7 +209,11 @@ export class Merchant {
   @Column({ default: true })
   paymentConfirmedEmailEnabled: boolean;
 
-  @Column({ type: 'enum', enum: SettlementFrequency, default: SettlementFrequency.INSTANT })
+  @Column({
+    type: 'enum',
+    enum: SettlementFrequency,
+    default: SettlementFrequency.INSTANT,
+  })
   settlementFrequency: SettlementFrequency;
 
   @OneToMany(() => Payment, (payment) => payment.merchant)
