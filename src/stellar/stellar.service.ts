@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { CacheService } from '../cache/cache.service';
@@ -281,6 +281,15 @@ export class StellarService implements OnModuleInit {
     asset: StellarSdk.Asset,
     memo?: string,
   ): Promise<string> {
+    // Not routed through callHorizon: a 404 from user input must not trip the shared circuit breaker.
+    try {
+      await this.server.loadAccount(destinationId);
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
+        throw new BadRequestException(`Destination Stellar account ${destinationId} does not exist`);
+      }
+      throw error;
+    }
     return this.stellarTxQueue.submitPayment(destinationId, amount, asset, memo);
   }
 
