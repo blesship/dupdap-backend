@@ -361,6 +361,7 @@ export class StellarService implements OnModuleInit {
         );
       }
 
+      await this.waitForTransaction(submitted.hash, fn, args);
       return submitted.hash;
     } catch (error) {
       if (error instanceof SorobanRpcException) {
@@ -374,6 +375,39 @@ export class StellarService implements OnModuleInit {
         fn,
         args,
       );
+    }
+  }
+
+  /**
+   * Poll getTransaction until the ledger closes. NOT_FOUND means not yet included, so keep polling.
+   * Timeout is a 504 with sorobanCode 'tx_confirmation_timeout': the tx may still land, so callers can retry the read.
+   */
+  private async waitForTransaction(hash: string, fn: string, args: unknown[]): Promise<void> {
+    const deadline = Date.now() + 30_000;
+    let delayMs = 500;
+    while (true) {
+      const tx = await this.sorobanRpc.call('get transaction', (rpc) => rpc.getTransaction(hash));
+      if (tx.status === 'SUCCESS') return;
+      if (tx.status === 'FAILED') {
+        throw new SorobanRpcException(
+          'Soroban transaction failed on ledger close',
+          this.extractSorobanErrorCode(tx),
+          HttpStatus.BAD_GATEWAY,
+          fn,
+          args,
+        );
+      }
+      if (Date.now() + delayMs > deadline) {
+        throw new SorobanRpcException(
+          `Soroban transaction ${hash} not confirmed within 30s`,
+          'tx_confirmation_timeout',
+          HttpStatus.GATEWAY_TIMEOUT,
+          fn,
+          args,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      delayMs = Math.min(delayMs * 2, 5_000);
     }
   }
 
