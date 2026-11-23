@@ -18,6 +18,15 @@ import { NotificationPrefsService } from '../notifications/notification-prefs.se
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationChannel, NotificationEventType } from '../notifications/entities/notification-preference.entity';
 import { RetryConfigService } from '../retry/retry-config.service';
+import { Gauge } from 'prom-client';
+
+/** Unix timestamp (seconds) of the last Stellar transaction processed by the monitor. */
+export const stellarMonitorLastProcessedAt = new Gauge({
+  name: 'stellar_monitor_last_processed_at',
+  help: 'Unix timestamp (seconds) of the last Stellar transaction processed by the monitor',
+});
+
+const DEFAULT_STALE_AFTER_MS = 600_000;
 
 @Injectable()
 export class StellarMonitorService implements OnModuleInit {
@@ -27,6 +36,8 @@ export class StellarMonitorService implements OnModuleInit {
   private lastRunStatus: 'idle' | 'ok' | 'error' = 'idle';
   private lastRunError: string | null = null;
   private lastProcessedLedger: number | null = null;
+  private lastProcessedAt: Date | null = null;
+  private readonly startedAt = new Date();
   private lagLedgers = 0;
 
   constructor(
@@ -64,6 +75,8 @@ export class StellarMonitorService implements OnModuleInit {
   }
 
   async scanPendingPayments() {
+    await this.checkStaleness();
+
     // Graceful degradation: while the Horizon circuit is open, pause polling
     // instead of issuing requests that are known to fail.
     if (this.stellar.isHorizonCircuitOpen()) {
@@ -102,6 +115,8 @@ export class StellarMonitorService implements OnModuleInit {
 
       for (const tx of transactions) {
         this.cursors.set(depositAddress, tx.paging_token);
+        this.lastProcessedAt = new Date();
+        stellarMonitorLastProcessedAt.set(this.lastProcessedAt.getTime() / 1000);
 
         const txLedger = this.parseLedger(tx);
         if (txLedger !== null) {
@@ -177,6 +192,34 @@ export class StellarMonitorService implements OnModuleInit {
    */
   getLagLedgers(): number {
     return this.lagLedgers;
+  }
+
+  /**
+   * Raises an admin alert when no transaction has been processed for longer than
+   * STELLAR_MONITOR_STALE_AFTER_MS (default 10 minutes). The clock starts at boot,
+   * so a monitor that never processes anything still alerts.
+   */
+  private async checkStaleness(): Promise<void> {
+    const staleAfterMs = this.config.get<number>(
+      'STELLAR_MONITOR_STALE_AFTER_MS',
+      DEFAULT_STALE_AFTER_MS,
+    );
+    const idleMs = Date.now() - (this.lastProcessedAt ?? this.startedAt).getTime();
+    if (idleMs <= staleAfterMs) return;
+
+    const idleMinutes = Math.floor(idleMs / 60_000);
+    this.logger.warn(`Stellar monitor has not processed a transaction for ${idleMinutes} minutes`);
+    try {
+      await this.adminAlerts.raise({
+        type: AdminAlertType.STELLAR_MONITOR,
+        dedupeKey: 'stellar-monitor.stale',
+        message: `Stellar monitor has not processed a transaction for ${idleMinutes} minutes`,
+        metadata: { lastProcessedAt: this.lastProcessedAt?.toISOString() ?? null },
+        thresholdValue: 1,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to raise Stellar monitor staleness alert: ${err.message}`);
+    }
   }
 
   private async updateLag(depositAddress: string): Promise<void> {
